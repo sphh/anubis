@@ -68,4 +68,34 @@ yourdomain.example.com {
 }
 ```
 
-If you want to protect multiple services with Anubis, you will need to either start multiple instances of Anubis (Anubis requires less than 32 MB of ram on average) or set up a two-tier routing setup where TLS termination is done with one instance of Caddy and the actual routing to services is done with another instance of Caddy. See the [nginx](./nginx.mdx) or [Apache](./apache.mdx) documentation to get ideas on how you would do this.
+If you want to protect multiple services with Anubis, you will need to either start multiple instances of Anubis (Anubis requires less than 32 MB of RAM on average) or set up a two-tier routing setup. With Caddy it is not necessary to run two instances as with [nginx](./nginx.mdx) or [Apache](./apache.mdx):
+```Caddyfile
+# conf/Caddyfile
+
+yourdomain.example.com {
+	# Frontend configuration to work before Anubis
+	reverse_proxy unix//run/anubis/example/yourdomain.sock {
+		header_up X-Real-Ip {remote_host}
+		header_up X-Http-Version {http.request.proto}
+	}
+}
+
+:80 {
+	# Backend configuration to work behind Anubis
+	bind unix//run/caddy/example/yourdomain-backend.sock
+
+	# Your Caddy configuration for the backend
+}
+```
+
+Note, that this `Caddyfile` uses Unix sockets instead of TCP connections to remove the overhead associated with network communication. This requires that Anubis and Caddy both can access the sockets. When using `systemd` add
+```toml
+[Service]
+User=caddy
+Group=caddy
+```
+to `/etc/systemd/system/anubis@.service.d/user.conf` to run Anubis under the user `caddy`. Then edit Caddy's service file with `sudo systemctl edit caddy.service` and add the `RuntimeDirectory` directive to the `[Service]` section to automatically create the directory:
+```toml
+[Service]
+RuntimeDirectory=caddy/example
+```
